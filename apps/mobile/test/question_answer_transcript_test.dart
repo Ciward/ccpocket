@@ -58,92 +58,55 @@ void main() {
       expect(question.freeTextAnswer, 'A hidden cave');
       expect(transcript.plainText, contains('Forest, A hidden cave'));
     });
-  });
 
-  group('questionAnswerTranscriptText', () {
-    test('formats a direct single-question answer', () {
-      expect(
-        questionAnswerTranscriptText(
-          input: const {
-            'questions': [
-              {'question': 'Which sound?', 'options': []},
-            ],
-          },
-          result: 'Forest birdsong',
-        ),
-        'Question: Which sound?\nAnswer: Forest birdsong',
-      );
-    });
-
-    test('maps Codex answers by question ID, including duplicate text', () {
-      expect(
-        questionAnswerTranscriptText(
-          input: const {
-            'questions': [
-              {'id': 'first', 'question': 'Which version?'},
-              {'id': 'second', 'question': 'Which version?'},
-            ],
-          },
-          result: '{"answers":{"first":"Stable","second":"Preview"}}',
-        ),
-        'Question: Which version?\nAnswer: Stable\n\n'
-        'Question: Which version?\nAnswer: Preview',
-      );
-    });
-
-    test(
-      'maps SDK answers by question text and formats multi-select values',
-      () {
-        expect(
-          questionAnswerTranscriptText(
-            input: const {
-              'questions': [
-                {'question': 'Which channels?', 'multiSelect': true},
-              ],
-            },
-            result:
-                '{"questions":[{"question":"Which channels?"}],'
-                '"answers":{"Which channels?":["Issues","Pull requests"]}}',
-          ),
-          'Question: Which channels?\nAnswer: Issues, Pull requests',
-        );
-      },
-    );
-
-    test('does not invent an answer from a legacy status label', () {
-      expect(
-        questionAnswerTranscriptText(
-          input: const {
-            'questions': [
-              {'question': 'Which sound?'},
-            ],
-          },
-          result: 'Answered',
-        ),
-        isNull,
-      );
-    });
-
-    test('does not retain or display secret answers', () {
-      const secret = 'top-secret-value';
+    test('maps submitted option values to their displayed labels', () {
       final transcript = questionAnswerTranscript(
         input: const {
           'questions': [
             {
-              'id': 'password',
-              'question': 'What is the access token?',
-              'isSecret': true,
+              'id': 'sound',
+              'question': 'Which sound should the garden use?',
+              'options': [
+                {
+                  'label': 'Forest birdsong',
+                  'value': 'forest-birds',
+                  'description': 'Morning birds',
+                },
+              ],
             },
           ],
         },
-        result: secret,
+        result: '{"answers":{"sound":" forest-birds "}}',
       );
 
       expect(transcript, isNotNull);
-      expect(transcript!.plainText, isNot(contains(secret)));
-      expect(transcript.plainText, contains('[hidden]'));
-      expect(transcript.questions.single.answerHidden, isTrue);
-      expect(transcript.questions.single.freeTextAnswer, isNull);
+      final question = transcript!.questions.single;
+      expect(question.options.single.label, 'Forest birdsong');
+      expect(question.options.single.selected, isTrue);
+      expect(question.freeTextAnswer, isNull);
+      expect(transcript.plainText, contains('Answer: Forest birdsong'));
     });
+  });
+
+  test('does not retain or display secret answers', () {
+    const secret = 'top-secret-value';
+    final transcript = questionAnswerTranscript(
+      input: const {
+        'questions': [
+          {
+            'id': 'password',
+            'question': 'What is the access token?',
+            'isSecret': true,
+          },
+        ],
+      },
+      result: secret,
+    );
+
+    expect(transcript, isNotNull);
+    expect(transcript!.plainText, isNot(contains(secret)));
+    expect(transcript.plainText, contains('[hidden]'));
+    expect(transcript.questions.single.answerHidden, isTrue);
+    expect(transcript.questions.single.freeTextAnswer, isNull);
   });
 }

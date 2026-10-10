@@ -69,16 +69,26 @@ QuestionAnswerTranscript? questionAnswerTranscript({
     final answerValues = _answerValues(answer);
     if (answerValues.isEmpty) continue;
 
-    final optionLabels = options
-        .map((option) => (option['label'] as String? ?? '').trim())
-        .toSet();
+    final labelByAnswer = <String, String>{};
+    for (final option in options) {
+      final label = (option['label'] as String? ?? '').trim();
+      if (label.isNotEmpty) labelByAnswer.putIfAbsent(label, () => label);
+    }
+    for (final option in options) {
+      final label = (option['label'] as String? ?? '').trim();
+      final optionValue = option['value'];
+      if (label.isEmpty || optionValue is! String) continue;
+      final value = optionValue.trim();
+      if (value.isNotEmpty) labelByAnswer.putIfAbsent(value, () => label);
+    }
     final selectedLabels = <String>{};
     final freeTextValues = <String>[];
     var selectedOtherMarker = false;
 
     for (final value in answerValues) {
-      if (optionLabels.contains(value)) {
-        selectedLabels.add(value);
+      final label = labelByAnswer[value];
+      if (label != null) {
+        selectedLabels.add(label);
         continue;
       }
       final otherAnswer = _otherAnswerValue(value);
@@ -129,12 +139,6 @@ QuestionAnswerTranscript? questionAnswerTranscript({
     plainText: plainTextBlocks.join('\n\n'),
   );
 }
-
-/// Plain-text form retained for clipboard, accessibility, and simple callers.
-String? questionAnswerTranscriptText({
-  required Map<String, dynamic>? input,
-  required String result,
-}) => questionAnswerTranscript(input: input, result: result)?.plainText;
 
 Map<String, dynamic>? _answerEnvelope(String result) {
   try {

@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Keep answered AskUserQuestion transcripts visible in Claude and Codex chat after history restoration, while hiding secret answers.
+- Match submitted option values to their displayed labels in answered question transcripts.
+
 ## [1.140.3] - 2026-10-10
 
 ### Fixed
