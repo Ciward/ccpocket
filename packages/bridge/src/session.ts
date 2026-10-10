@@ -137,6 +137,7 @@ export type HistoryDeltaResult =
     };
 
 export interface QueuedCodexInput extends QueuedInputItem {
+  clientMessageId?: string;
   userMessageUuid?: string;
   images?: Array<{
     base64: string;
@@ -1599,6 +1600,9 @@ export class SessionManager {
     return {
       type: "user_input",
       text: queued.text,
+      ...(queued.clientMessageId
+        ? { clientMessageId: queued.clientMessageId }
+        : {}),
       ...(queued.userMessageUuid ? { userMessageUuid: queued.userMessageUuid } : {}),
       timestamp: new Date().toISOString(),
       ...(queued.imageCount ? { imageCount: queued.imageCount } : {}),

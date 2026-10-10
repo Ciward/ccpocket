@@ -9090,6 +9090,7 @@ describe("BridgeWebSocketServer resume/get_history flow", () => {
       {
         type: "input",
         sessionId,
+        clientMessageId: "cm-busy-input",
         text: "while busy",
       },
       ws,
@@ -9101,7 +9102,10 @@ describe("BridgeWebSocketServer resume/get_history flow", () => {
       sessionId,
       queued: true,
     });
-    expect(session.codexQueuedInput).toMatchObject({ text: "while busy" });
+    expect(session.codexQueuedInput).toMatchObject({
+      text: "while busy",
+      clientMessageId: "cm-busy-input",
+    });
     expect(session.process.sendInput).not.toHaveBeenCalled();
     (bridge as any).sendSessionList(ws);
     sent = ws.send.mock.calls.map((c: unknown[]) => JSON.parse(c[0] as string));
