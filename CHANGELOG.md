@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Keep queued Codex prompts in the chat when a rejected turn UUID is reused, placing the accepted prompt before its reply.
+
 ## [1.140.3] - 2026-10-10
 
 ### Fixed
