@@ -67,24 +67,22 @@ void main() {
               'id': 'sound',
               'question': 'Which sound should the garden use?',
               'options': [
-                {
-                  'label': 'Forest birdsong',
-                  'value': 'forest-birds',
-                  'description': 'Morning birds',
-                },
+                {'label': 'Standard', 'value': 'basic'},
+                {'label': 'basic', 'value': 'basic-tier'},
               ],
             },
           ],
         },
-        result: '{"answers":{"sound":" forest-birds "}}',
+        result: '{"answers":{"sound":"basic"}}',
       );
 
       expect(transcript, isNotNull);
       final question = transcript!.questions.single;
-      expect(question.options.single.label, 'Forest birdsong');
-      expect(question.options.single.selected, isTrue);
+      expect(question.options.first.label, 'Standard');
+      expect(question.options.first.selected, isTrue);
+      expect(question.options.last.selected, isFalse);
       expect(question.freeTextAnswer, isNull);
-      expect(transcript.plainText, contains('Answer: Forest birdsong'));
+      expect(transcript.plainText, contains('Answer: Standard'));
     });
   });
 

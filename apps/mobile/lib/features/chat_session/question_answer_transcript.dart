@@ -72,14 +72,14 @@ QuestionAnswerTranscript? questionAnswerTranscript({
     final labelByAnswer = <String, String>{};
     for (final option in options) {
       final label = (option['label'] as String? ?? '').trim();
-      if (label.isNotEmpty) labelByAnswer.putIfAbsent(label, () => label);
-    }
-    for (final option in options) {
-      final label = (option['label'] as String? ?? '').trim();
       final optionValue = option['value'];
       if (label.isEmpty || optionValue is! String) continue;
       final value = optionValue.trim();
       if (value.isNotEmpty) labelByAnswer.putIfAbsent(value, () => label);
+    }
+    for (final option in options) {
+      final label = (option['label'] as String? ?? '').trim();
+      if (label.isNotEmpty) labelByAnswer.putIfAbsent(label, () => label);
     }
     final selectedLabels = <String>{};
     final freeTextValues = <String>[];
