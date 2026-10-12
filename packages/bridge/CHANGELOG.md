@@ -2,6 +2,12 @@
 
 All notable changes to `@ccpocket/bridge` will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- Preserve structured AskUserQuestion answers in resolved results and Performance-mode history so mobile clients can restore answered-question transcripts.
+
 ## [1.88.2] - 2026-10-10
 
 ### Fixed

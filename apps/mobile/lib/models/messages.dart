@@ -5681,6 +5681,67 @@ class UserChatEntry implements ChatEntry {
        timestamp = timestamp ?? DateTime.now();
 }
 
+/// A resolved AskUserQuestion shown with tool styling rather than as a prompt.
+class AnsweredQuestionOption {
+  final String label;
+  final String? description;
+  final bool selected;
+
+  const AnsweredQuestionOption({
+    required this.label,
+    this.description,
+    this.selected = false,
+  });
+}
+
+class AnsweredQuestion {
+  final String? header;
+  final String question;
+  final bool multiSelect;
+  final List<AnsweredQuestionOption> options;
+  final String? freeTextAnswer;
+  final bool answerHidden;
+
+  const AnsweredQuestion({
+    this.header,
+    required this.question,
+    this.multiSelect = false,
+    this.options = const [],
+    this.freeTextAnswer,
+    this.answerHidden = false,
+  });
+}
+
+class QuestionAnswerTranscript {
+  final List<AnsweredQuestion> questions;
+  final String plainText;
+
+  const QuestionAnswerTranscript({
+    required this.questions,
+    required this.plainText,
+  });
+}
+
+/// A resolved question transcript; unlike [UserChatEntry], it is not a prompt.
+class QuestionAnswerChatEntry implements ChatEntry {
+  final String text;
+  final String toolUseId;
+  final QuestionAnswerTranscript transcript;
+  final String? sessionId;
+  final String? clientMessageId;
+  @override
+  final DateTime timestamp;
+
+  QuestionAnswerChatEntry(
+    this.text, {
+    required this.toolUseId,
+    required this.transcript,
+    DateTime? timestamp,
+    this.sessionId,
+    this.clientMessageId,
+  }) : timestamp = timestamp ?? DateTime.now();
+}
+
 class StreamingChatEntry implements ChatEntry {
   String text;
   @override
