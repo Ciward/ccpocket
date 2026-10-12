@@ -3254,6 +3254,7 @@ export class BridgeWebSocketServer {
 
           const queued = this.sessionManager.queueCodexInput(session.id, {
             itemId: randomUUID(),
+            ...(clientMessageId ? { clientMessageId } : {}),
             text,
             createdAt: new Date().toISOString(),
             userMessageUuid: nextCodexUserTurnUuid(session),

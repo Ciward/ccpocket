@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 - Keep answered AskUserQuestion transcripts visible in Claude and Codex chat after history restoration, while hiding secret answers.
 - Match submitted option values to their displayed labels in answered question transcripts.
+- Keep queued Codex prompts in the chat when a rejected turn UUID is reused, placing the accepted prompt before its reply.
 
 ## [1.140.3] - 2026-10-10
 

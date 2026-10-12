@@ -3345,41 +3345,140 @@ void main() {
       },
     );
 
-    test('codex busy send waits for bridge queue state', () async {
-      final cubit = createCubit('s1', provider: Provider.codex);
-      addTearDown(cubit.close);
-      await Future.microtask(() {});
+    test(
+      'Codex busy input with a reused turn UUID appears before its reply',
+      () async {
+        final cubit = createCubit('s1', provider: Provider.codex);
+        addTearDown(cubit.close);
+        await Future.microtask(() {});
 
-      mockBridge.emitMessage(
-        const StatusMessage(status: ProcessStatus.running),
-        sessionId: 's1',
-      );
-      await Future.microtask(() {});
-
-      await cubit.sendMessage('Follow up');
-
-      expect(cubit.state.entries.whereType<UserChatEntry>(), isEmpty);
-      expect(mockBridge.sentMessages.last.type, 'input');
-
-      mockBridge.emitMessage(
-        const ConversationQueueMessage(
+        mockBridge.emitMessage(
+          const StatusMessage(status: ProcessStatus.idle),
           sessionId: 's1',
-          limit: 1,
-          items: [
-            QueuedInputItem(
-              itemId: 'q1',
-              text: 'Follow up',
-              createdAt: '2026-04-25T00:00:00.000Z',
-            ),
-          ],
-        ),
-        sessionId: 's1',
-      );
-      await Future.microtask(() {});
+        );
+        await Future.microtask(() {});
 
-      expect(cubit.state.queuedInput?.itemId, 'q1');
-      expect(cubit.state.queuedInput?.text, 'Follow up');
-    });
+        await cubit.sendMessage('Rejected prompt');
+        final rejectedPayload = jsonDecode(
+          mockBridge.sentMessages.last.toJson(),
+        ) as Map<String, dynamic>;
+        final rejectedClientMessageId =
+            rejectedPayload['clientMessageId'] as String;
+        expect(
+          (cubit.state.entries.whereType<UserChatEntry>().single).messageUuid,
+          'codex:user-turn:1',
+        );
+        mockBridge.emitMessage(
+          InputRejectedMessage(
+            sessionId: 's1',
+            clientMessageId: rejectedClientMessageId,
+            reason: 'conflict',
+          ),
+          sessionId: 's1',
+        );
+        await Future.microtask(() {});
+        expect(
+          cubit.state.entries.whereType<UserChatEntry>().single.status,
+          MessageStatus.failed,
+        );
+
+        mockBridge.emitMessage(
+          const StatusMessage(status: ProcessStatus.running),
+          sessionId: 's1',
+        );
+        await Future.microtask(() {});
+
+        await cubit.sendMessage('Follow up');
+
+        final usersBeforeDelivery = cubit.state.entries
+            .whereType<UserChatEntry>()
+            .toList();
+        expect(usersBeforeDelivery, hasLength(1));
+        expect(usersBeforeDelivery.single.text, 'Rejected prompt');
+        expect(mockBridge.sentMessages.last.type, 'input');
+        final payload = jsonDecode(
+          mockBridge.sentMessages.last.toJson(),
+        ) as Map<String, dynamic>;
+        final clientMessageId = payload['clientMessageId'] as String;
+
+        mockBridge.emitMessage(
+          InputAckMessage(
+            sessionId: 's1',
+            clientMessageId: clientMessageId,
+            queued: true,
+          ),
+          sessionId: 's1',
+        );
+        await Future.microtask(() {});
+
+        mockBridge.emitMessage(
+          const ConversationQueueMessage(
+            sessionId: 's1',
+            limit: 1,
+            items: [
+              QueuedInputItem(
+                itemId: 'q1',
+                text: 'Follow up',
+                createdAt: '2026-04-25T00:00:00.000Z',
+              ),
+            ],
+          ),
+          sessionId: 's1',
+        );
+        await Future.microtask(() {});
+
+        expect(cubit.state.queuedInput?.itemId, 'q1');
+        expect(cubit.state.queuedInput?.text, 'Follow up');
+
+        mockBridge.emitMessage(
+          const ConversationQueueMessage(sessionId: 's1', limit: 1, items: []),
+          sessionId: 's1',
+        );
+        await Future.microtask(() {});
+        mockBridge.emitMessage(
+          UserInputMessage(
+            text: 'Follow up',
+            clientMessageId: clientMessageId,
+            // The server can reuse this UUID because the preceding prompt was
+            // rejected and never became part of the Codex thread.
+            userMessageUuid: 'codex:user-turn:1',
+          ),
+          sessionId: 's1',
+        );
+        await Future.microtask(() {});
+        mockBridge.emitMessage(
+          AssistantServerMessage(
+            message: AssistantMessage(
+              id: 'a-follow-up',
+              role: 'assistant',
+              content: [TextContent(text: 'I will do that.')],
+              model: 'codex',
+            ),
+          ),
+          sessionId: 's1',
+        );
+        await Future.microtask(() {});
+
+        final entries = cubit.state.entries;
+        final deliveredUsers = entries.whereType<UserChatEntry>().toList();
+        final assistantIndex = entries.indexWhere(
+          (entry) =>
+              entry is ServerChatEntry &&
+              entry.message is AssistantServerMessage,
+        );
+        expect(deliveredUsers, hasLength(2));
+        expect(deliveredUsers.first.text, 'Rejected prompt');
+        expect(deliveredUsers.first.status, MessageStatus.failed);
+        expect(deliveredUsers.last.text, 'Follow up');
+        expect(deliveredUsers.last.status, MessageStatus.sent);
+        expect(deliveredUsers.last.messageUuid, 'codex:user-turn:1');
+        expect(entries.indexOf(deliveredUsers.last), lessThan(assistantIndex));
+        expect(
+          deliveredUsers.where((entry) => entry.text == 'Follow up'),
+          hasLength(1),
+        );
+      },
+    );
 
     test(
       'codex queued input update steer and cancel send client messages',
@@ -3415,6 +3514,88 @@ void main() {
         ) as Map<String, dynamic>;
         expect(payload['type'], 'cancel_queued_input');
         expect(payload['itemId'], 'q1');
+      },
+    );
+
+    test(
+      'legacy Bridge echo does not attach a new turn to a rejected UUID',
+      () async {
+        final cubit = createCubit('s1', provider: Provider.codex);
+        addTearDown(cubit.close);
+        await Future.microtask(() {});
+
+        mockBridge.emitMessage(
+          const StatusMessage(status: ProcessStatus.idle),
+          sessionId: 's1',
+        );
+        await Future.microtask(() {});
+        await cubit.sendMessage('Rejected prompt');
+        final rejectedClientMessageId =
+            (jsonDecode(mockBridge.sentMessages.last.toJson())
+                    as Map<String, dynamic>)['clientMessageId']
+                as String;
+        mockBridge.emitMessage(
+          InputRejectedMessage(
+            sessionId: 's1',
+            clientMessageId: rejectedClientMessageId,
+            reason: 'conflict',
+          ),
+          sessionId: 's1',
+        );
+        await Future.microtask(() {});
+        mockBridge.emitMessage(
+          const StatusMessage(status: ProcessStatus.running),
+          sessionId: 's1',
+        );
+        await Future.microtask(() {});
+        await cubit.sendMessage('Follow up');
+
+        // Protocol v1 Bridges may omit clientMessageId from user_input.
+        mockBridge.emitMessage(
+          const UserInputMessage(
+            text: 'Follow up',
+            userMessageUuid: 'codex:user-turn:1',
+          ),
+          sessionId: 's1',
+        );
+        await Future.microtask(() {});
+
+        final users = cubit.state.entries.whereType<UserChatEntry>().toList();
+        expect(users, hasLength(2));
+        expect(users.first.status, MessageStatus.failed);
+        expect(users.last.text, 'Follow up');
+        expect(users.last.status, MessageStatus.sent);
+      },
+    );
+
+    test(
+      'legacy echo avoids an ambiguous text match for identical prompts',
+      () async {
+        final cubit = createCubit('s1', provider: Provider.codex);
+        addTearDown(cubit.close);
+        mockBridge.emitMessage(
+          const StatusMessage(status: ProcessStatus.idle),
+          sessionId: 's1',
+        );
+        await Future.microtask(() {});
+
+        await cubit.sendMessage('Repeat this prompt');
+        await cubit.sendMessage('Repeat this prompt');
+        final clientIds = cubit.state.entries
+            .whereType<UserChatEntry>()
+            .map((entry) => entry.clientMessageId)
+            .toList();
+
+        mockBridge.emitMessage(
+          const UserInputMessage(text: 'Repeat this prompt'),
+          sessionId: 's1',
+        );
+        await Future.microtask(() {});
+
+        final users = cubit.state.entries.whereType<UserChatEntry>().toList();
+        expect(users, hasLength(3));
+        expect(users.take(2).map((entry) => entry.clientMessageId), clientIds);
+        expect(users.last.clientMessageId, isNull);
       },
     );
 

@@ -764,25 +764,31 @@ class ChatSessionCubit extends Cubit<ChatSessionState> {
         :imageUrls,
         :timestamp,
       ) = update.userUuidUpdate!;
-      var matchedUserEntry = false;
-      for (int i = entries.length - 1; i >= 0; i--) {
-        final e = entries[i];
-        if (e is UserChatEntry &&
-            ((e.messageUuid == uuid) ||
-                (clientMessageId != null &&
-                    e.clientMessageId == clientMessageId) ||
-                (e.messageUuid == null &&
-                    clientMessageId == null &&
-                    e.text == text))) {
-          matchedUserEntry = true;
-          if (e.messageUuid != uuid) {
-            e.messageUuid = uuid;
-            didModifyEntries = true;
-          }
-          break;
+      final matchIndex = _userEntryMatchIndex(
+        entries,
+        text: text,
+        imageCount: imageCount,
+        clientMessageId: clientMessageId,
+        messageUuid: uuid,
+      );
+      if (matchIndex != -1) {
+        final entry = entries[matchIndex] as UserChatEntry;
+        if (entry.messageUuid != uuid || entry.status != MessageStatus.sent) {
+          entries = [...entries];
+          entries[matchIndex] = UserChatEntry(
+            entry.text,
+            sessionId: entry.sessionId,
+            clientMessageId: entry.clientMessageId,
+            imageBytesList: entry.imageBytesList,
+            imageUrls: entry.imageUrls,
+            imageCount: entry.imageCount,
+            status: MessageStatus.sent,
+            messageUuid: uuid,
+            timestamp: entry.timestamp,
+          );
+          didModifyEntries = true;
         }
-      }
-      if (!matchedUserEntry) {
+      } else {
         entries = [
           ...entries,
           UserChatEntry(
@@ -1245,7 +1251,15 @@ class ChatSessionCubit extends Cubit<ChatSessionState> {
     var didChange = false;
 
     for (final addition in additions) {
-      var matchIndex = _indexOfEquivalentEntry(next, addition);
+      var matchIndex = addition is UserChatEntry
+          ? _userEntryMatchIndex(
+              next,
+              text: addition.text,
+              imageCount: addition.imageCount,
+              clientMessageId: addition.clientMessageId,
+              messageUuid: addition.messageUuid,
+            )
+          : _indexOfEquivalentEntry(next, addition);
       if (matchIndex == -1 && _canWeakMatchAppendedEntry(addition)) {
         final lastUserIndex = next.lastIndexWhere((e) => e is UserChatEntry);
         matchIndex = _indexOfEquivalentEntry(
@@ -1270,6 +1284,45 @@ class ChatSessionCubit extends Cubit<ChatSessionState> {
     }
 
     return (entries: next, didChange: didChange);
+  }
+
+  int _userEntryMatchIndex(
+    List<ChatEntry> entries, {
+    required String text,
+    required int imageCount,
+    required String? clientMessageId,
+    required String? messageUuid,
+  }) {
+    final candidates = <int>[];
+    for (var i = 0; i < entries.length; i++) {
+      final entry = entries[i];
+      if (entry is! UserChatEntry) continue;
+
+      final hasClientMessageIds =
+          clientMessageId?.isNotEmpty == true &&
+          entry.clientMessageId?.isNotEmpty == true;
+      if (hasClientMessageIds) {
+        if (clientMessageId == entry.clientMessageId) return i;
+        continue;
+      }
+
+      final hasMessageUuids =
+          messageUuid?.isNotEmpty == true &&
+          entry.messageUuid?.isNotEmpty == true;
+      if (hasMessageUuids && messageUuid == entry.messageUuid) {
+        if (entry.status != MessageStatus.failed) return i;
+        continue;
+      }
+      if (clientMessageId?.isNotEmpty == true ||
+          entry.status == MessageStatus.failed ||
+          (entry.status != MessageStatus.sending &&
+              entry.status != MessageStatus.queued)) {
+        continue;
+      }
+      if (entry.text != text || entry.imageCount != imageCount) continue;
+      candidates.add(i);
+    }
+    return candidates.length == 1 ? candidates.single : -1;
   }
 
   bool _canWeakMatchAppendedEntry(ChatEntry entry) {
@@ -1306,6 +1359,15 @@ class ChatSessionCubit extends Cubit<ChatSessionState> {
     ChatEntry b, {
     bool allowWeakMatch = false,
   }) {
+    if (a is UserChatEntry && b is UserChatEntry) {
+      final aClientMessageId = a.clientMessageId;
+      final bClientMessageId = b.clientMessageId;
+      if (aClientMessageId?.isNotEmpty == true &&
+          bClientMessageId?.isNotEmpty == true) {
+        return aClientMessageId == bClientMessageId;
+      }
+    }
+
     final aKey = _entryStableKey(a);
     final bKey = _entryStableKey(b);
     if (aKey != null && bKey != null && aKey == bKey) return true;
