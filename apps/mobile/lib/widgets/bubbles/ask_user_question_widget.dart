@@ -7,8 +7,7 @@ import 'package:flutter/services.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/request_user_input.dart';
-
-const _buttonHeight = 44.0;
+import 'ask_question_option_button.dart';
 
 class AskUserQuestionWidget extends StatefulWidget {
   final String toolUseId;
@@ -597,6 +596,7 @@ class _AskQuestionLayout extends StatelessWidget {
     final text = question['question'] as String? ?? '';
     final options = question['options'] as List<dynamic>? ?? const [];
     final isMulti = question['multiSelect'] as bool? ?? false;
+    final isSecret = question['isSecret'] as bool? ?? false;
 
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -636,7 +636,7 @@ class _AskQuestionLayout extends StatelessWidget {
             if (opt is Map<String, dynamic>)
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
-                child: _AskOptionButton(
+                child: AskQuestionOptionButton(
                   optionKey: ValueKey(
                     'ask_option_${questionIndex}_${opt['label'] as String? ?? ''}',
                   ),
@@ -672,6 +672,7 @@ class _AskQuestionLayout extends StatelessWidget {
           _AskTextInputRow(
             controller: getOrCreateController(questionIndex),
             hintText: l.typeYourAnswer,
+            obscureText: isSecret,
             onChanged: (text) => onCustomTextChanged(questionIndex, text),
             onSubmitted: () => onSubmitCustomText(questionIndex),
             showSendButton: true,
@@ -681,6 +682,7 @@ class _AskQuestionLayout extends StatelessWidget {
           const SizedBox(height: 4),
           _AskOtherAnswerSection(
             questionIndex: questionIndex,
+            isSecret: isSecret,
             isCustomInputShown: customInputs.contains(questionIndex),
             isMultiQuestion: isMultiQuestion,
             controller: getOrCreateController(questionIndex),
@@ -696,104 +698,9 @@ class _AskQuestionLayout extends StatelessWidget {
   }
 }
 
-class _AskOptionButton extends StatelessWidget {
-  final Key? optionKey;
-  final String label;
-  final String description;
-  final bool isSelected;
-  final bool isMulti;
-  final VoidCallback onTap;
-
-  const _AskOptionButton({
-    this.optionKey,
-    required this.label,
-    required this.description,
-    required this.isSelected,
-    required this.isMulti,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final appColors = Theme.of(context).extension<AppColors>()!;
-
-    return Material(
-      color: isSelected
-          ? appColors.askIcon.withValues(alpha: 0.1)
-          : Theme.of(context).colorScheme.surface.withValues(alpha: 0.6),
-      borderRadius: BorderRadius.circular(10),
-      child: InkWell(
-        key: optionKey,
-        borderRadius: BorderRadius.circular(10),
-        onTap: onTap,
-        child: Container(
-          constraints: const BoxConstraints(minHeight: _buttonHeight),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: isSelected
-                  ? appColors.askIcon.withValues(alpha: 0.45)
-                  : Theme.of(context).colorScheme.outlineVariant
-                        .withValues(alpha: 0.5),
-              width: isSelected ? 1.5 : 1,
-            ),
-          ),
-          child: Row(
-            children: [
-              if (isMulti) ...[
-                Icon(
-                  isSelected ? Icons.check_box : Icons.check_box_outline_blank,
-                  size: 18,
-                  color: isSelected
-                      ? appColors.askIcon
-                      : appColors.subtleText.withValues(alpha: 0.8),
-                ),
-                const SizedBox(width: 8),
-              ],
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: isSelected ? appColors.askIcon : null,
-                      ),
-                    ),
-                    if (description.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        description,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              if (!isMulti) ...[
-                const SizedBox(width: 8),
-                Icon(
-                  Icons.chevron_right,
-                  size: 18,
-                  color: appColors.subtleText.withValues(alpha: 0.8),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _AskOtherAnswerSection extends StatelessWidget {
   final int questionIndex;
+  final bool isSecret;
   final bool isCustomInputShown;
   final bool isMultiQuestion;
   final TextEditingController controller;
@@ -803,6 +710,7 @@ class _AskOtherAnswerSection extends StatelessWidget {
 
   const _AskOtherAnswerSection({
     required this.questionIndex,
+    required this.isSecret,
     required this.isCustomInputShown,
     required this.isMultiQuestion,
     required this.controller,
@@ -818,6 +726,7 @@ class _AskOtherAnswerSection extends StatelessWidget {
       return _AskTextInputRow(
         controller: controller,
         hintText: isMultiQuestion ? l.orTypeCustomAnswer : l.typeYourAnswer,
+        obscureText: isSecret,
         onChanged: (text) => onCustomTextChanged(questionIndex, text),
         onSubmitted: () => onSubmitCustomText(questionIndex),
         showSendButton: true,
@@ -847,6 +756,7 @@ class _AskTextInputRow extends StatelessWidget {
   final ValueChanged<String>? onChanged;
   final VoidCallback onSubmitted;
   final bool showSendButton;
+  final bool obscureText;
   final String? submitLabel;
 
   const _AskTextInputRow({
@@ -855,6 +765,7 @@ class _AskTextInputRow extends StatelessWidget {
     required this.onSubmitted,
     this.onChanged,
     this.showSendButton = true,
+    this.obscureText = false,
     this.submitLabel,
   });
 
@@ -870,9 +781,14 @@ class _AskTextInputRow extends StatelessWidget {
             key: const ValueKey('ask_custom_text_input'),
             controller: controller,
             onChanged: onChanged,
-            maxLines: 3,
+            maxLines: obscureText ? 1 : 3,
             minLines: 1,
-            keyboardType: TextInputType.multiline,
+            obscureText: obscureText,
+            enableSuggestions: !obscureText,
+            autocorrect: !obscureText,
+            keyboardType: obscureText
+                ? TextInputType.visiblePassword
+                : TextInputType.multiline,
             textInputAction: TextInputAction.newline,
             decoration: InputDecoration(
               hintText: hintText,
@@ -999,11 +915,15 @@ class _AskSummaryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final cs = Theme.of(context).colorScheme;
     final header = question['header'] as String? ?? 'Q${index + 1}';
-    final displayAnswer = (answer != null && answer!.trim().isNotEmpty)
-        ? answer!
-        : '-';
+    final answerText = answer?.trim();
+    final displayAnswer = answerText == null || answerText.isEmpty
+        ? '-'
+        : question['isSecret'] == true
+        ? l.answerHidden
+        : answer!;
 
     return Material(
       color: cs.surface.withValues(alpha: 0.6),

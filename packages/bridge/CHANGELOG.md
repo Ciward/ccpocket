@@ -2,6 +2,14 @@
 
 All notable changes to `@ccpocket/bridge` will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- Register Claude permission requests before publishing them and emit resolution events after user decisions so session summaries stay current.
+
+- Preserve structured AskUserQuestion answers in resolved results and Performance-mode history so mobile clients can restore answered-question transcripts.
+- Preserve client message IDs when queued Codex input is delivered to the session.
+
 ## [1.88.2] - 2026-10-10
 
 ### Fixed

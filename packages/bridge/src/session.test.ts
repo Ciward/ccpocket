@@ -1190,6 +1190,7 @@ describe("SessionManager codex path", () => {
     );
     const queued = manager.queueCodexInput(sessionId, {
       itemId: "queued-1",
+      clientMessageId: "cm-follow-up",
       text: "Follow up",
       createdAt: "2026-04-25T00:00:00.000Z",
       imageCount: 1,
@@ -1231,6 +1232,7 @@ describe("SessionManager codex path", () => {
           entry.sessionId === sessionId &&
           entry.msg.type === "user_input" &&
           entry.msg.text === "Follow up" &&
+          entry.msg.clientMessageId === "cm-follow-up" &&
           "imageCount" in entry.msg &&
           entry.msg.imageCount === 1,
       ),

@@ -11,6 +11,7 @@ import '../../../models/messages.dart';
 import '../../../services/bridge_service.dart';
 import '../../../services/chat_message_handler.dart';
 import '../permission_transcript.dart';
+import '../question_answer_transcript.dart';
 import 'chat_session_state.dart';
 import 'streaming_state_cubit.dart';
 
@@ -393,7 +394,10 @@ class ChatSessionCubit extends Cubit<ChatSessionState> {
     if (msg is SessionHistoryResetMessage) {
       final localUsers = state.entries
           .skip(_pastEntryCount)
-          .whereType<UserChatEntry>()
+          .where(
+            (entry) =>
+                entry is UserChatEntry || entry is QuestionAnswerChatEntry,
+          )
           .toList();
       _pastEntryCount = 0;
       _pastHistoryLoaded = false;
@@ -574,6 +578,63 @@ class ChatSessionCubit extends Cubit<ChatSessionState> {
 
   void _applyUpdate(ChatStateUpdate update, ServerMessage originalMsg) {
     final current = state;
+    var entriesToPrepend = update.entriesToPrepend;
+    var entriesToAdd = update.entriesToAdd;
+    if (update.entriesToPrepend.any(_isAnsweredToolResult) ||
+        update.entriesToAdd.any(_isAnsweredToolResult)) {
+      final transcriptContextEntries = [
+        ...current.entries,
+        ...update.entriesToPrepend,
+        ...update.entriesToAdd,
+      ];
+      final questionInputs = _questionInputsByToolUseId(
+        transcriptContextEntries,
+      );
+      final seenQuestionAnswers = update.replaceEntries
+          ? <String>{}
+          : current.entries
+                .whereType<QuestionAnswerChatEntry>()
+                .map((entry) => entry.clientMessageId)
+                .whereType<String>()
+                .toSet();
+
+      List<ChatEntry> includeQuestionAnswers(List<ChatEntry> source) {
+        final result = <ChatEntry>[];
+        for (final entry in source) {
+          result.add(entry);
+          if (entry case ServerChatEntry(
+            message: ToolResultMessage(
+              :final toolUseId,
+              :final content,
+              permissionOutcome: PermissionOutcome.answered,
+            ),
+          )) {
+            final clientMessageId = _questionAnswerClientMessageId(toolUseId);
+            if (seenQuestionAnswers.contains(clientMessageId)) continue;
+            final transcript = questionAnswerTranscript(
+              input: questionInputs[toolUseId],
+              result: content,
+            );
+            if (transcript == null) continue;
+            seenQuestionAnswers.add(clientMessageId);
+            result.add(
+              QuestionAnswerChatEntry(
+                transcript.plainText,
+                toolUseId: toolUseId,
+                transcript: transcript,
+                sessionId: sessionId,
+                clientMessageId: clientMessageId,
+                timestamp: entry.timestamp,
+              ),
+            );
+          }
+        }
+        return result;
+      }
+
+      entriesToPrepend = includeQuestionAnswers(update.entriesToPrepend);
+      entriesToAdd = includeQuestionAnswers(update.entriesToAdd);
+    }
 
     // --- Streaming state (separate cubit) ---
     if (update.resetStreaming) {
@@ -605,12 +666,12 @@ class ChatSessionCubit extends Cubit<ChatSessionState> {
     // cannot transiently duplicate every old message in the viewport.
     if (originalMsg is PastHistoryMessage) {
       final liveEntries = entries.skip(_pastEntryCount).toList();
-      _pastEntryCount = update.entriesToPrepend.length;
-      entries = [...update.entriesToPrepend, ...liveEntries];
+      _pastEntryCount = entriesToPrepend.length;
+      entries = [...entriesToPrepend, ...liveEntries];
       didModifyEntries = true;
-    } else if (update.entriesToPrepend.isNotEmpty) {
-      _pastEntryCount += update.entriesToPrepend.length;
-      entries = [...update.entriesToPrepend, ...entries];
+    } else if (entriesToPrepend.isNotEmpty) {
+      _pastEntryCount += entriesToPrepend.length;
+      entries = [...entriesToPrepend, ...entries];
       didModifyEntries = true;
     }
 
@@ -703,25 +764,31 @@ class ChatSessionCubit extends Cubit<ChatSessionState> {
         :imageUrls,
         :timestamp,
       ) = update.userUuidUpdate!;
-      var matchedUserEntry = false;
-      for (int i = entries.length - 1; i >= 0; i--) {
-        final e = entries[i];
-        if (e is UserChatEntry &&
-            ((e.messageUuid == uuid) ||
-                (clientMessageId != null &&
-                    e.clientMessageId == clientMessageId) ||
-                (e.messageUuid == null &&
-                    clientMessageId == null &&
-                    e.text == text))) {
-          matchedUserEntry = true;
-          if (e.messageUuid != uuid) {
-            e.messageUuid = uuid;
-            didModifyEntries = true;
-          }
-          break;
+      final matchIndex = _userEntryMatchIndex(
+        entries,
+        text: text,
+        imageCount: imageCount,
+        clientMessageId: clientMessageId,
+        messageUuid: uuid,
+      );
+      if (matchIndex != -1) {
+        final entry = entries[matchIndex] as UserChatEntry;
+        if (entry.messageUuid != uuid || entry.status != MessageStatus.sent) {
+          entries = [...entries];
+          entries[matchIndex] = UserChatEntry(
+            entry.text,
+            sessionId: entry.sessionId,
+            clientMessageId: entry.clientMessageId,
+            imageBytesList: entry.imageBytesList,
+            imageUrls: entry.imageUrls,
+            imageCount: entry.imageCount,
+            status: MessageStatus.sent,
+            messageUuid: uuid,
+            timestamp: entry.timestamp,
+          );
+          didModifyEntries = true;
         }
-      }
-      if (!matchedUserEntry) {
+      } else {
         entries = [
           ...entries,
           UserChatEntry(
@@ -742,7 +809,7 @@ class ChatSessionCubit extends Cubit<ChatSessionState> {
     }
 
     // Add new entries (skip streaming entries — those go to StreamingState)
-    final nonStreamingEntries = update.entriesToAdd
+    final nonStreamingEntries = entriesToAdd
         .where((e) => e is! StreamingChatEntry)
         .toList();
     if (update.replaceEntries) {
@@ -790,19 +857,7 @@ class ChatSessionCubit extends Cubit<ChatSessionState> {
               e.imageBytesList.isEmpty && existing.imageBytesList.isNotEmpty;
           final needsTimestamp = existing.timestamp != e.timestamp;
           if (needsImages || needsTimestamp) {
-            entries[i] = UserChatEntry(
-              e.text,
-              sessionId: e.sessionId,
-              clientMessageId: e.clientMessageId,
-              imageBytesList: needsImages
-                  ? existing.imageBytesList
-                  : e.imageBytesList,
-              imageUrls: e.imageUrls,
-              imageCount: e.imageCount,
-              status: e.status,
-              messageUuid: e.messageUuid,
-              timestamp: existing.timestamp,
-            );
+            entries[i] = _mergeEquivalentEntry(existing, e);
           }
         }
       }
@@ -1022,6 +1077,14 @@ class ChatSessionCubit extends Cubit<ChatSessionState> {
     }
   }
 
+  bool _isAnsweredToolResult(ChatEntry entry) => switch (entry) {
+    ServerChatEntry(
+      message: ToolResultMessage(permissionOutcome: PermissionOutcome.answered),
+    ) =>
+      true,
+    _ => false,
+  };
+
   _UsageTotals _calculateUsageTotals(List<ChatEntry> entries) {
     double totalCost = 0;
     double durationMs = 0;
@@ -1188,7 +1251,15 @@ class ChatSessionCubit extends Cubit<ChatSessionState> {
     var didChange = false;
 
     for (final addition in additions) {
-      var matchIndex = _indexOfEquivalentEntry(next, addition);
+      var matchIndex = addition is UserChatEntry
+          ? _userEntryMatchIndex(
+              next,
+              text: addition.text,
+              imageCount: addition.imageCount,
+              clientMessageId: addition.clientMessageId,
+              messageUuid: addition.messageUuid,
+            )
+          : _indexOfEquivalentEntry(next, addition);
       if (matchIndex == -1 && _canWeakMatchAppendedEntry(addition)) {
         final lastUserIndex = next.lastIndexWhere((e) => e is UserChatEntry);
         matchIndex = _indexOfEquivalentEntry(
@@ -1213,6 +1284,53 @@ class ChatSessionCubit extends Cubit<ChatSessionState> {
     }
 
     return (entries: next, didChange: didChange);
+  }
+
+  int _userEntryMatchIndex(
+    List<ChatEntry> entries, {
+    required String text,
+    required int imageCount,
+    required String? clientMessageId,
+    required String? messageUuid,
+  }) {
+    final candidates = <int>[];
+    for (var i = 0; i < entries.length; i++) {
+      final entry = entries[i];
+      if (entry is! UserChatEntry) continue;
+
+      final hasClientMessageIds =
+          clientMessageId?.isNotEmpty == true &&
+          entry.clientMessageId?.isNotEmpty == true;
+      if (hasClientMessageIds) {
+        if (clientMessageId == entry.clientMessageId) return i;
+        continue;
+      }
+
+      final hasMessageUuids =
+          messageUuid?.isNotEmpty == true &&
+          entry.messageUuid?.isNotEmpty == true;
+      if (hasMessageUuids && messageUuid == entry.messageUuid) {
+        if (entry.status != MessageStatus.failed) return i;
+        continue;
+      }
+      // Claude may acknowledge delivery before echoing the provider UUID.
+      // Match that local entry once, but never collapse distinct known turns.
+      final awaitingProviderUuid =
+          entry.status == MessageStatus.sent &&
+          entry.clientMessageId?.isNotEmpty == true &&
+          entry.messageUuid?.isNotEmpty != true &&
+          messageUuid?.isNotEmpty == true;
+      if (clientMessageId?.isNotEmpty == true ||
+          entry.status == MessageStatus.failed ||
+          (entry.status != MessageStatus.sending &&
+              entry.status != MessageStatus.queued &&
+              !awaitingProviderUuid)) {
+        continue;
+      }
+      if (entry.text != text || entry.imageCount != imageCount) continue;
+      candidates.add(i);
+    }
+    return candidates.length == 1 ? candidates.single : -1;
   }
 
   bool _canWeakMatchAppendedEntry(ChatEntry entry) {
@@ -1249,6 +1367,15 @@ class ChatSessionCubit extends Cubit<ChatSessionState> {
     ChatEntry b, {
     bool allowWeakMatch = false,
   }) {
+    if (a is UserChatEntry && b is UserChatEntry) {
+      final aClientMessageId = a.clientMessageId;
+      final bClientMessageId = b.clientMessageId;
+      if (aClientMessageId?.isNotEmpty == true &&
+          bClientMessageId?.isNotEmpty == true) {
+        return aClientMessageId == bClientMessageId;
+      }
+    }
+
     final aKey = _entryStableKey(a);
     final bKey = _entryStableKey(b);
     if (aKey != null && bKey != null && aKey == bKey) return true;
@@ -1273,6 +1400,9 @@ class ChatSessionCubit extends Cubit<ChatSessionState> {
   }
 
   String? _entryStableKey(ChatEntry entry) {
+    if (entry is QuestionAnswerChatEntry) {
+      return 'question-answer:${entry.toolUseId}';
+    }
     if (entry is UserChatEntry) {
       final uuid = entry.messageUuid;
       if (uuid != null && uuid.isNotEmpty) return 'user:uuid:$uuid';
@@ -1403,7 +1533,9 @@ class ChatSessionCubit extends Cubit<ChatSessionState> {
   }
 
   bool _shouldPreserveEntryAcrossHistoryReplace(ChatEntry entry) {
-    if (entry is UserChatEntry) return true;
+    if (entry is UserChatEntry || entry is QuestionAnswerChatEntry) {
+      return true;
+    }
     if (entry is ServerChatEntry) {
       return entry.message is! StatusMessage &&
           entry.message is! InputAckMessage &&
@@ -1414,6 +1546,17 @@ class ChatSessionCubit extends Cubit<ChatSessionState> {
   }
 
   ChatEntry _mergeEquivalentEntry(ChatEntry existing, ChatEntry incoming) {
+    if (existing is QuestionAnswerChatEntry &&
+        incoming is QuestionAnswerChatEntry) {
+      return QuestionAnswerChatEntry(
+        incoming.text.isNotEmpty ? incoming.text : existing.text,
+        toolUseId: existing.toolUseId,
+        transcript: incoming.transcript,
+        sessionId: existing.sessionId ?? incoming.sessionId,
+        clientMessageId: existing.clientMessageId ?? incoming.clientMessageId,
+        timestamp: existing.timestamp,
+      );
+    }
     if (existing is UserChatEntry && incoming is UserChatEntry) {
       final imageBytes = existing.imageBytesList.isNotEmpty
           ? existing.imageBytesList
@@ -1424,17 +1567,23 @@ class ChatSessionCubit extends Cubit<ChatSessionState> {
       final imageCount = incoming.imageCount > 0
           ? incoming.imageCount
           : existing.imageCount;
+      final text = existing.text.isNotEmpty ? existing.text : incoming.text;
+      final sessionId = existing.sessionId ?? incoming.sessionId;
+      final clientMessageId =
+          existing.clientMessageId ?? incoming.clientMessageId;
+      final status = incoming.status == MessageStatus.sent
+          ? MessageStatus.sent
+          : existing.status;
+      final messageUuid = existing.messageUuid ?? incoming.messageUuid;
       return UserChatEntry(
-        existing.text.isNotEmpty ? existing.text : incoming.text,
-        sessionId: existing.sessionId ?? incoming.sessionId,
-        clientMessageId: existing.clientMessageId ?? incoming.clientMessageId,
+        text,
+        sessionId: sessionId,
+        clientMessageId: clientMessageId,
         imageBytesList: imageBytes,
         imageUrls: imageUrls,
         imageCount: imageCount,
-        status: incoming.status == MessageStatus.sent
-            ? MessageStatus.sent
-            : existing.status,
-        messageUuid: existing.messageUuid ?? incoming.messageUuid,
+        status: status,
+        messageUuid: messageUuid,
         timestamp: existing.timestamp,
       );
     }
@@ -1942,6 +2091,7 @@ class ChatSessionCubit extends Cubit<ChatSessionState> {
 
   /// Answer an AskUserQuestion.
   void answer(String toolUseId, String result) {
+    _appendQuestionAnswerToTranscript(toolUseId, result);
     _markToolUseResponded(toolUseId);
     _bridge.send(ClientMessage.answer(toolUseId, result, sessionId: sessionId));
     _emitNextPendingInputOrNone(toolUseId);
@@ -2091,6 +2241,80 @@ class ChatSessionCubit extends Cubit<ChatSessionState> {
       ),
     );
   }
+
+  Map<String, Map<String, dynamic>> _questionInputsByToolUseId(
+    List<ChatEntry> entries,
+  ) {
+    final result = <String, Map<String, dynamic>>{};
+    for (final entry in entries) {
+      if (entry is! ServerChatEntry) continue;
+      switch (entry.message) {
+        case PermissionRequestMessage(
+              :final toolUseId,
+              :final toolName,
+              :final input,
+            )
+            when toolName == 'AskUserQuestion':
+          result[toolUseId] = input;
+        case AssistantServerMessage(:final message):
+          for (final content in message.content) {
+            if (content case ToolUseContent(
+              :final id,
+              name: 'AskUserQuestion',
+              :final input,
+            )) {
+              result[id] = input;
+            }
+          }
+        default:
+          break;
+      }
+    }
+    return result;
+  }
+
+  Map<String, dynamic>? _questionInputForToolUseId(String toolUseId) {
+    if (state.approval
+        case ApprovalAskUser(
+          toolUseId: final activeToolUseId,
+          input: final input,
+        )
+        when activeToolUseId == toolUseId) {
+      return input;
+    }
+    return _questionInputsByToolUseId(state.entries)[toolUseId];
+  }
+
+  void _appendQuestionAnswerToTranscript(String toolUseId, String result) {
+    final clientMessageId = _questionAnswerClientMessageId(toolUseId);
+    if (state.entries.whereType<QuestionAnswerChatEntry>().any(
+      (entry) => entry.clientMessageId == clientMessageId,
+    )) {
+      return;
+    }
+    final transcript = questionAnswerTranscript(
+      input: _questionInputForToolUseId(toolUseId),
+      result: result,
+    );
+    if (transcript == null) return;
+    emit(
+      state.copyWith(
+        entries: [
+          ...state.entries,
+          QuestionAnswerChatEntry(
+            transcript.plainText,
+            toolUseId: toolUseId,
+            transcript: transcript,
+            sessionId: sessionId,
+            clientMessageId: clientMessageId,
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _questionAnswerClientMessageId(String toolUseId) =>
+      'question-answer:$toolUseId';
 
   void setCodexPermissionsMode(CodexPermissionsMode mode) {
     final policy =
