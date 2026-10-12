@@ -1,2 +1,5 @@
-• Fixed reasoning-effort options for GPT-6 Astra. Unsupported None and Minimal options are hidden, and saved selections are moved to Light.
-• Requires Bridge 1.81.2 or later.
+- Keep answered questions and selected answers visible in chat, including after reconnecting to a running Bridge.
+- Improve question and approval order and answers from the session list.
+- Preserve chat and unsent inputs during reconnects; fix missing or duplicate queued prompts.
+- Make Performance mode activity and long durations easier to read.
+- Bridge 1.88.3 is recommended for the latest improvements.
