@@ -20,3 +20,22 @@ uses the last recorded activity time; it does not start a new grace period.
 Active sessions are never reclaimed by this mechanism. Reclamation removes the
 live process, not persisted provider conversation history. The interval is
 unreferenced and is cleared when the manager is destroyed.
+
+## Answered question transcripts
+
+Answered questions retain their question context and submitted choices in the
+mobile transcript. The Bridge preserves structured answer results in its in-memory
+history, including Performance mode. Reconnection to that running Bridge restores
+these panels. Provider disk history (past sessions or after a Bridge restart) does
+not yet restore answered-question panels; this change does not add durable answer
+storage. Codex secret answers are sent to the provider but redacted before replay.
+
+Claude permission requests are registered before being announced. Both resolution
+and answer-result events must follow delivery of the request to every listener,
+including listeners that answer synchronously.
+
+Queued Codex prompts retain their client message IDs through delivery. Matching
+prefers client IDs over provider turn UUIDs. For echoes without client IDs, a unique
+pending input may match by text and image count. Claude's acknowledged local input
+may also match once while awaiting its provider UUID. Failed inputs, distinct
+known sent turns, and ambiguous identical inputs must not be folded together.
