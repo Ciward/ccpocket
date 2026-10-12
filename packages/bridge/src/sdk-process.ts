@@ -656,7 +656,7 @@ interface PendingPermission {
   toolName: string;
   input: Record<string, unknown>;
   announcingRequest?: boolean;
-  resolutionEventPending?: boolean;
+  resolutionEventsPending?: ServerMessage[];
 }
 
 // PermissionResult is imported from @anthropic-ai/claude-agent-sdk
@@ -1099,8 +1099,7 @@ export class SdkProcess extends EventEmitter<SdkProcessEvents> {
         ...pending.input,
         answers,
       },
-    });
-    this.emitMessage({
+    }, {
       type: "tool_result",
       toolUseId,
       content: result,
@@ -1553,8 +1552,8 @@ export class SdkProcess extends EventEmitter<SdkProcessEvents> {
         input,
       });
       pending.announcingRequest = false;
-      if (pending.resolutionEventPending) {
-        this.emitMessage({ type: "permission_resolved", toolUseId });
+      for (const event of pending.resolutionEventsPending ?? []) {
+        this.emitMessage(event);
       }
 
       // Handle abort (timeout)
@@ -1577,6 +1576,7 @@ export class SdkProcess extends EventEmitter<SdkProcessEvents> {
     toolUseId: string,
     pending: PendingPermission,
     result: PermissionResult,
+    answerEvent?: ServerMessage,
   ): void {
     if (this.pendingPermissions.get(toolUseId) !== pending) return;
 
@@ -1585,10 +1585,16 @@ export class SdkProcess extends EventEmitter<SdkProcessEvents> {
     if (this.pendingPermissions.size === 0) {
       this.setStatus("running");
     }
+    const events: ServerMessage[] = [
+      { type: "permission_resolved", toolUseId },
+      ...(answerEvent ? [answerEvent] : []),
+    ];
+    // Synchronous request listeners can answer before later listeners receive
+    // the request. Keep both resolution and transcript events behind it.
     if (pending.announcingRequest) {
-      pending.resolutionEventPending = true;
+      pending.resolutionEventsPending = events;
     } else {
-      this.emitMessage({ type: "permission_resolved", toolUseId });
+      for (const event of events) this.emitMessage(event);
     }
   }
 

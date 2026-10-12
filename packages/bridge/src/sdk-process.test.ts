@@ -2187,6 +2187,72 @@ describe("SdkProcess.waitForPermission", () => {
   });
 });
 
+describe("SdkProcess synchronous question answers", () => {
+  it.each([false, true])(
+    "publishes answer events after every request listener (another pending request: %s)",
+    async (hasOtherRequest) => {
+      const proc = new SdkProcess();
+      if (hasOtherRequest) {
+        (proc as any).pendingPermissions.set("other", {
+          resolve: vi.fn(),
+          toolName: "Read",
+          input: {},
+        });
+      }
+      const events: string[][] = [[], []];
+      const pendingAtResolution: string[][] = [];
+      let answered = false;
+      for (let index = 0; index < events.length; index++) {
+        proc.on("message", (message) => {
+          if (
+            message.type === "permission_request" ||
+            message.type === "permission_resolved" ||
+            message.type === "tool_result"
+          ) {
+            events[index].push(message.type);
+          }
+          if (index === 0 && message.type === "permission_request") {
+            answered = proc.answer(message.toolUseId, "Flutter");
+          }
+          if (message.type === "permission_resolved") {
+            pendingAtResolution.push(
+              proc.getPendingPermissions().map((pending) => pending.toolUseId),
+            );
+          }
+          if (message.type === "tool_result") {
+            expect(message).toMatchObject({
+              toolUseId: "ask-1",
+              content: "Flutter",
+              permissionOutcome: "answered",
+            });
+          }
+        });
+      }
+      const result = await (proc as any).waitForPermission(
+        "ask-1",
+        "AskUserQuestion",
+        { questions: [{ question: "Which framework?" }] },
+        new AbortController().signal,
+      );
+      expect(answered).toBe(true);
+      expect(result.updatedInput.answers).toEqual({
+        "Which framework?": "Flutter",
+      });
+      for (const observed of events) {
+        expect(observed).toEqual([
+          "permission_request",
+          "permission_resolved",
+          "tool_result",
+        ]);
+      }
+      expect(pendingAtResolution).toEqual(
+        hasOtherRequest ? [["other"], ["other"]] : [[], []],
+      );
+      expect(proc.status).toBe(hasOtherRequest ? "waiting_approval" : "running");
+    },
+  );
+});
+
 describe("SdkProcess permission resolution events", () => {
   it.each(["approve", "approveAlways", "reject"] as const)(
     "announces a resolved request after %s",
