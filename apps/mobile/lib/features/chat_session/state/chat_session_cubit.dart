@@ -1313,10 +1313,18 @@ class ChatSessionCubit extends Cubit<ChatSessionState> {
         if (entry.status != MessageStatus.failed) return i;
         continue;
       }
+      // Claude may acknowledge delivery before echoing the provider UUID.
+      // Match that local entry once, but never collapse distinct known turns.
+      final awaitingProviderUuid =
+          entry.status == MessageStatus.sent &&
+          entry.clientMessageId?.isNotEmpty == true &&
+          entry.messageUuid?.isNotEmpty != true &&
+          messageUuid?.isNotEmpty == true;
       if (clientMessageId?.isNotEmpty == true ||
           entry.status == MessageStatus.failed ||
           (entry.status != MessageStatus.sending &&
-              entry.status != MessageStatus.queued)) {
+              entry.status != MessageStatus.queued &&
+              !awaitingProviderUuid)) {
         continue;
       }
       if (entry.text != text || entry.imageCount != imageCount) continue;

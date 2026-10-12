@@ -3517,6 +3517,47 @@ void main() {
       },
     );
 
+    test('Claude ACK before UUID echo keeps one local prompt', () async {
+      final cubit = createCubit('s1');
+      addTearDown(cubit.close);
+      await Future.microtask(() {});
+      await cubit.sendMessage('Confirmed prompt');
+      final local = cubit.state.entries.whereType<UserChatEntry>().single;
+      mockBridge.emitMessage(
+        InputAckMessage(
+          sessionId: 's1',
+          clientMessageId: local.clientMessageId,
+        ),
+        sessionId: 's1',
+      );
+      await Future.microtask(() {});
+      expect(
+        cubit.state.entries.whereType<UserChatEntry>().single.status,
+        MessageStatus.sent,
+      );
+      const echo = UserInputMessage(
+        text: 'Confirmed prompt',
+        userMessageUuid: 'claude-user-1',
+      );
+      mockBridge.emitMessage(echo, sessionId: 's1');
+      await Future.microtask(() {});
+      mockBridge.emitMessage(echo, sessionId: 's1');
+      await Future.microtask(() {});
+      final users = cubit.state.entries.whereType<UserChatEntry>().toList();
+      expect(users, hasLength(1));
+      expect(users.single.clientMessageId, local.clientMessageId);
+      expect(users.single.messageUuid, 'claude-user-1');
+      mockBridge.emitMessage(
+        const UserInputMessage(
+          text: 'Confirmed prompt',
+          userMessageUuid: 'claude-user-2',
+        ),
+        sessionId: 's1',
+      );
+      await Future.microtask(() {});
+      expect(cubit.state.entries.whereType<UserChatEntry>(), hasLength(2));
+    });
+
     test(
       'legacy Bridge echo does not attach a new turn to a rejected UUID',
       () async {
