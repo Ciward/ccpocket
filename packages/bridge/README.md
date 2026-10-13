@@ -39,6 +39,7 @@ ccpocket-bridge --version
 | Environment Variable | Default | Description |
 |---------------------|---------|-------------|
 | `BRIDGE_PORT` | `8765` | WebSocket port |
+| `BRIDGE_IDLE_SESSION_TTL_MINUTES` | Disabled | Automatically stop idle sessions after this many minutes. Only a finite positive number enables this; unset, empty, zero, negative, or invalid values disable it. The 30-idle-session retention cap still applies. |
 | `BRIDGE_NOTIFY_GOAL_TURN_COMPLETED` | `false` | Set exactly to `true` to notify intermediate Codex turns while a Goal is active. Goal completion, blockers, limits, approvals and errors remain enabled. Read at session creation; restart Bridge to apply to all sessions. |
 | `BRIDGE_HOST` | `0.0.0.0` | Bind address |
 | `BRIDGE_API_KEY` | (none) | API key authentication (enabled when set) |

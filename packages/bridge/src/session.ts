@@ -192,14 +192,6 @@ export interface SessionSummary {
 
 export const MAX_HISTORY_PER_SESSION = 100;
 const MAX_IDLE_SESSIONS = 30;
-const IDLE_SESSION_TTL_MS =
-  Math.max(
-    1,
-    Number.parseInt(process.env.BRIDGE_IDLE_SESSION_TTL_MINUTES ?? "15", 10) ||
-      15,
-  ) *
-  60 *
-  1000;
 
 export type GalleryImageCallback = (meta: GalleryImageMeta) => void;
 export type SessionUpdatedCallback = (sessionId: string) => void;
@@ -290,6 +282,7 @@ export class SessionManager {
   private onGalleryImage: GalleryImageCallback | null;
   private worktreeStore: WorktreeStore | null;
   private onSessionUpdated: SessionUpdatedCallback | null;
+  private readonly idleSessionTtlMs: number;
   private idleEvictionTimer: ReturnType<typeof setInterval>;
 
   /** Cache completion entities per provider and effective cwd. */
@@ -320,6 +313,10 @@ export class SessionManager {
     this.onGalleryImage = onGalleryImage ?? null;
     this.worktreeStore = worktreeStore ?? null;
     this.onSessionUpdated = onSessionUpdated ?? null;
+    const idleTtlMinutes = Number(process.env.BRIDGE_IDLE_SESSION_TTL_MINUTES);
+    this.idleSessionTtlMs = Number.isFinite(idleTtlMinutes) && idleTtlMinutes > 0
+      ? idleTtlMinutes * 60 * 1000
+      : Infinity;
     this.idleEvictionTimer = setInterval(
       () => this.evictStaleIdleSessions(),
       60 * 1000,
@@ -1931,7 +1928,7 @@ export class SessionManager {
     const staleIdleSessions = idleSessions.filter(
       (session, index) =>
         index < Math.max(0, this.idleSessionCount() - MAX_IDLE_SESSIONS) ||
-        now - session.lastActivityAt.getTime() >= IDLE_SESSION_TTL_MS,
+        now - session.lastActivityAt.getTime() >= this.idleSessionTtlMs,
     );
 
     for (const session of staleIdleSessions) {

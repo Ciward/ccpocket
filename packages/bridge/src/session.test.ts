@@ -985,12 +985,28 @@ describe("SessionManager codex path", () => {
     let manager: SessionManager;
     beforeEach(() => {
       vi.useFakeTimers();
+      vi.stubEnv("BRIDGE_IDLE_SESSION_TTL_MINUTES", "15");
       manager = new SessionManager(() => {});
     });
     afterEach(() => {
       manager.destroyAll();
       vi.useRealTimers();
+      vi.unstubAllEnvs();
     });
+
+    it.each([undefined, "", "0", "-1", "invalid", "15minutes", "Infinity"])(
+      "disables time-based reclamation for TTL %s",
+      (value) => {
+        manager.destroyAll();
+        vi.stubEnv("BRIDGE_IDLE_SESSION_TTL_MINUTES", value);
+        manager = new SessionManager(() => {});
+        const id = manager.create("/tmp/retained", undefined, undefined, undefined, "codex");
+        codexInstances[0].emit("status", "idle");
+        vi.advanceTimersByTime(24 * 60 * 60_000);
+        expect(manager.get(id)).toBeDefined();
+        expect(codexInstances[0].stop).not.toHaveBeenCalled();
+      },
+    );
 
     it("reclaims expired idle sessions without requiring a new session event", () => {
       const id = manager.create("/tmp/expired", undefined, undefined, undefined, "codex");

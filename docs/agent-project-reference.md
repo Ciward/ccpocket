@@ -89,6 +89,7 @@ Flutter App ←WebSocket→ websocket.ts ←→ session.ts ─┤
 | 変数 | デフォルト | 説明 |
 |------|-----------|------|
 | `BRIDGE_PORT` | `8765` | WebSocketポート |
+| `BRIDGE_IDLE_SESSION_TTL_MINUTES` | 無効 | 正の有限数を指定した場合だけ、その分数の無操作で待機セッションを終了。未設定・空・0・負数・不正値は無効。待機30件の保持上限は別途適用 |
 | `BRIDGE_HOST` | `0.0.0.0` | バインドアドレス |
 | `BRIDGE_API_KEY` | (なし) | APIキー認証 (設定時に有効化) |
 | `BRIDGE_ALLOWED_DIRS` | `$HOME` | 許可するプロジェクトディレクトリ (カンマ区切り) |
