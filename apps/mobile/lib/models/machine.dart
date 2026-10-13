@@ -179,14 +179,17 @@ abstract class Machine with _$Machine {
   String get displayName => name ?? formatHostPort(host, port);
 
   /// WebSocket URL for this machine
-  String get wsUrl =>
-      formatUriOrigin(scheme: useSsl ? 'wss' : 'ws', host: host, port: port);
+  String get wsUrl => formatUriOrigin(
+    scheme: useSsl ? 'wss' : 'ws',
+    host: host,
+    port: useSsl && port == 443 ? null : port,
+  );
 
   /// HTTP base URL for health checks
   String get httpUrl => formatUriOrigin(
     scheme: useSsl ? 'https' : 'http',
     host: host,
-    port: port,
+    port: useSsl && port == 443 ? null : port,
   );
 
   /// Unique key for deduplication (host:port)

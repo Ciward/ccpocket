@@ -21,8 +21,8 @@ void main() {
         useSsl: true,
       );
 
-      expect(machine.wsUrl, 'wss://bridge.example.com:443');
-      expect(machine.httpUrl, 'https://bridge.example.com:443');
+      expect(machine.wsUrl, 'wss://bridge.example.com');
+      expect(machine.httpUrl, 'https://bridge.example.com');
     });
 
     test('wraps IPv6 hosts in URLs and display endpoints', () {
@@ -42,6 +42,18 @@ void main() {
   });
 
   group('Machine JSON', () {
+    test('secure public bridge omits the default TLS port', () {
+      final machine = Machine(
+        id: 'secure-public',
+        host: 'ccpocket.tokenlab.pro',
+        port: 443,
+        useSsl: true,
+      );
+
+      expect(machine.wsUrl, 'wss://ccpocket.tokenlab.pro');
+      expect(machine.httpUrl, 'https://ccpocket.tokenlab.pro');
+    });
+
     test('useSsl defaults to false when missing from stored data', () {
       final machine = Machine.fromJson({
         'id': 'm3',

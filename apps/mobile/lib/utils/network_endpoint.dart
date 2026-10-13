@@ -112,6 +112,19 @@ String formatHostPort(String host, int port) =>
 String endpointIdentityKey(String host, int port) =>
     formatHostPort(canonicalHostIdentity(host), port);
 
+/// Resolve the port used by a Bridge URL when the URL omits one.
+///
+/// Public secure bridges terminate at HTTPS/WSS port 443. Plain WebSocket
+/// bridges keep the Bridge server's local default port 8765.
+int bridgePortForUri(Uri uri) {
+  if (uri.hasPort) return uri.port;
+  return switch (uri.scheme.toLowerCase()) {
+    'https' => 443,
+    'wss' => 443,
+    _ => 8765,
+  };
+}
+
 String formatUriOrigin({
   required String scheme,
   required String host,

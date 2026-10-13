@@ -365,6 +365,30 @@ void main() {
     });
   });
 
+  test('auto-connect lookup uses port 443 for an implicit secure URL', () async {
+    final cubit = createCubit();
+    addTearDown(cubit.close);
+    await Future.microtask(() {});
+
+    mockService.emitMachines([
+      MachineWithStatus(
+        machine: Machine(
+          id: 'secure-public',
+          host: 'ccpocket.tokenlab.pro',
+          port: 443,
+          useSsl: true,
+        ),
+      ),
+    ]);
+
+    final machine = await findAutoConnectMachine(
+      cubit,
+      Uri.parse('wss://ccpocket.tokenlab.pro'),
+    );
+
+    expect(machine?.id, 'secure-public');
+  });
+
   group('MachineManagerCubit - init', () {
     test('sets error on init failure', () async {
       mockService.initShouldFail = true;

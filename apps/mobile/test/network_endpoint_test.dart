@@ -47,5 +47,12 @@ void main() {
     test('omits the port when one is not supplied', () {
       expect(formatUriOrigin(scheme: 'https', host: '::1'), 'https://[::1]');
     });
+
+    test('uses the public TLS port for secure bridge URLs without a port', () {
+      expect(bridgePortForUri(Uri.parse('wss://bridge.example.com')), 443);
+      expect(bridgePortForUri(Uri.parse('https://bridge.example.com')), 443);
+      expect(bridgePortForUri(Uri.parse('ws://bridge.example.com')), 8765);
+      expect(bridgePortForUri(Uri.parse('ws://bridge.example.com:9000')), 9000);
+    });
   });
 }

@@ -91,7 +91,7 @@ Future<Machine?> findAutoConnectMachine(
 }) async {
   if (cubit == null) return null;
   await cubit.waitUntilLoaded(timeout: loadTimeout);
-  return cubit.findByHostPort(uri.host, uri.hasPort ? uri.port : 8765);
+  return cubit.findByHostPort(uri.host, bridgePortForUri(uri));
 }
 
 /// Shorten absolute path by replacing $HOME with ~.
@@ -452,6 +452,29 @@ class _SessionListScreenState extends State<SessionListScreen>
         if (uri != null) {
           cubit = context.read<MachineManagerCubit?>();
           machine = await findAutoConnectMachine(cubit, uri);
+          // Older builds recorded an implicit wss:// URL as port 8765.
+          // Migrate that machine to the public TLS port before reconnecting,
+          // while keeping its secure-stored API key and other settings.
+          if (machine == null &&
+              !uri.hasPort &&
+              (uri.scheme == 'wss' || uri.scheme == 'https')) {
+            final legacyMachine = cubit?.findByHostPort(uri.host, 8765);
+            if (legacyMachine != null) {
+              final apiKey = await cubit!.getApiKey(legacyMachine.id);
+              final migrated = legacyMachine.copyWith(
+                port: 443,
+                useSsl: true,
+                hasResolvedTransport: true,
+                connectionMode:
+                    legacyMachine.connectionMode ==
+                        BridgeConnectionMode.standardOnly
+                    ? BridgeConnectionMode.automatic
+                    : legacyMachine.connectionMode,
+              );
+              await cubit.updateMachine(migrated, apiKey: apiKey);
+              machine = cubit.getMachine(legacyMachine.id) ?? migrated;
+            }
+          }
         }
       } catch (_) {
         // Ignore lookup failures — legacy preferences remain available below.
@@ -565,7 +588,7 @@ class _SessionListScreenState extends State<SessionListScreen>
       if (uri != null) {
         await machineManagerCubit.recordConnection(
           host: uri.host,
-          port: uri.port != 0 ? uri.port : 8765,
+          port: bridgePortForUri(uri),
           apiKey: trimmedApiKey.isNotEmpty ? trimmedApiKey : null,
           useSsl: uri.scheme == 'https',
           connectionMode: connectionMode,
