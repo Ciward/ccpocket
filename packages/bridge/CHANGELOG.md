@@ -2,6 +2,11 @@
 
 All notable changes to `@ccpocket/bridge` will be documented in this file.
 
+## [1.88.4] - 2026-10-13
+
+### Fixed
+- Disable time-based idle session reclamation by default. Set `BRIDGE_IDLE_SESSION_TTL_MINUTES` to a finite positive number to enable it; unset, empty, zero, negative, and invalid values leave it disabled. The existing 30-idle-session retention cap still applies.
+
 ## [1.88.3] - 2026-10-12
 
 ### Fixed
