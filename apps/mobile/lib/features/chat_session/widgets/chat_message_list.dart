@@ -634,6 +634,7 @@ class _ChatMessageListState extends State<ChatMessageList> {
                             return ChatEntryWidget(
                               entry: StreamingChatEntry(
                                 text: streamingState.text,
+                                thinking: streamingState.thinking,
                               ),
                               previous: null,
                               httpBaseUrl: widget.httpBaseUrl,

@@ -14,7 +14,12 @@ class StreamingStateCubit extends Cubit<StreamingState> {
   }
 
   void appendThinking(String text) {
-    emit(state.copyWith(thinking: state.thinking + text));
+    emit(
+      state.copyWith(
+        thinking: state.thinking + text,
+        isStreaming: true,
+      ),
+    );
   }
 
   void reset() {

@@ -23,6 +23,23 @@ void main() {
     );
   });
 
+  testWidgets('renders thinking while streamed text is still empty', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: const StreamingBubble(
+          text: '',
+          thinking: 'Inspecting the image...',
+        ),
+      ),
+    );
+
+    expect(find.text('Thinking...'), findsOneWidget);
+    expect(find.text('Inspecting the image...'), findsOneWidget);
+  });
+
   testWidgets('coalesces rapid markdown updates and renders the latest text', (
     tester,
   ) async {

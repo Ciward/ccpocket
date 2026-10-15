@@ -68,16 +68,16 @@ void main() {
           cubit.appendThinking(' more');
         },
         expect: () => [
-          const StreamingState(thinking: 'Thinking...'),
-          const StreamingState(thinking: 'Thinking... more'),
+          const StreamingState(thinking: 'Thinking...', isStreaming: true),
+          const StreamingState(thinking: 'Thinking... more', isStreaming: true),
         ],
       );
 
-      test('does not set isStreaming', () {
+      test('marks the stream active so thinking is visible immediately', () {
         cubit.appendThinking('thought');
 
         expect(cubit.state.thinking, 'thought');
-        expect(cubit.state.isStreaming, false);
+        expect(cubit.state.isStreaming, true);
       });
 
       test('appends empty string without error', () {

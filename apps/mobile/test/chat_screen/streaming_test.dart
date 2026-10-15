@@ -67,12 +67,11 @@ void main() {
       await pumpN($.tester);
 
       // ThinkingDelta accumulates in the StreamingStateCubit's thinking
-      // field (not rendered as a visible widget during streaming — only
-      // finalized ThinkingContent in AssistantServerMessage renders a
-      // ThinkingBubble). Verify the cubit state directly.
+      // field and is rendered as a live ThinkingBubble during streaming.
       final element = $.tester.element(find.byType(Scaffold).first);
       final cubit = element.read<StreamingStateCubit>();
       expect(cubit.state.thinking, 'Thinking... more');
+      expect($('Thinking... more'), findsOneWidget);
     });
   });
 }

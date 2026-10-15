@@ -5744,8 +5744,9 @@ class QuestionAnswerChatEntry implements ChatEntry {
 
 class StreamingChatEntry implements ChatEntry {
   String text;
+  String thinking;
   @override
   final DateTime timestamp;
-  StreamingChatEntry({this.text = '', DateTime? timestamp})
+  StreamingChatEntry({this.text = '', this.thinking = '', DateTime? timestamp})
     : timestamp = timestamp ?? DateTime.now();
 }

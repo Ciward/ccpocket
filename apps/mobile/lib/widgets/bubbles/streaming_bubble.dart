@@ -10,15 +10,18 @@ import '../../providers/bridge_cubits.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/markdown_style.dart';
 import '../link_hover_underline.dart';
+import 'thinking_bubble.dart';
 
 class StreamingBubble extends StatefulWidget {
   final String text;
+  final String thinking;
   final FilePathTapCallback? onFileTap;
   final VoidCallback? onBeforeTextUpdate;
 
   const StreamingBubble({
     super.key,
     required this.text,
+    this.thinking = '',
     this.onFileTap,
     this.onBeforeTextUpdate,
   });
@@ -92,7 +95,9 @@ class _StreamingBubbleState extends State<StreamingBubble>
 
   @override
   Widget build(BuildContext context) {
-    if (_renderedText.isEmpty) return const SizedBox.shrink();
+    if (_renderedText.isEmpty && widget.thinking.isEmpty) {
+      return const SizedBox.shrink();
+    }
     final fileSuffixes = widget.onFileTap != null
         ? FilePathSyntax.cachedSuffixSet(context.watch<FileListCubit>().state)
         : const <String>{};
@@ -106,42 +111,49 @@ class _StreamingBubbleState extends State<StreamingBubble>
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          LinkHoverUnderline(
-            child: MarkdownBody(
-              data: _renderedText,
-              styleSheet: _markdownStyle,
-              onTapLink: buildChatMarkdownLinkHandler(
-                context,
-                onFileTap: widget.onFileTap,
-                knownPathSuffixes: fileSuffixes,
-              ),
-              inlineSyntaxes: [
-                if (widget.onFileTap != null) ...[
-                  FilePathSyntax(knownPathSuffixes: fileSuffixes),
-                  BareFilePathSyntax(knownPathSuffixes: fileSuffixes),
+          if (widget.thinking.isNotEmpty)
+            ThinkingBubble(
+              thinking: widget.thinking,
+              isStreaming: true,
+            ),
+          if (_renderedText.isNotEmpty) ...[
+            LinkHoverUnderline(
+              child: MarkdownBody(
+                data: _renderedText,
+                styleSheet: _markdownStyle,
+                onTapLink: buildChatMarkdownLinkHandler(
+                  context,
+                  onFileTap: widget.onFileTap,
+                  knownPathSuffixes: fileSuffixes,
+                ),
+                inlineSyntaxes: [
+                  if (widget.onFileTap != null) ...[
+                    FilePathSyntax(knownPathSuffixes: fileSuffixes),
+                    BareFilePathSyntax(knownPathSuffixes: fileSuffixes),
+                  ],
+                  ...colorCodeInlineSyntaxes,
+                  ...localhostAutolinkInlineSyntaxes,
                 ],
-                ...colorCodeInlineSyntaxes,
-                ...localhostAutolinkInlineSyntaxes,
-              ],
-              builders: {
-                if (widget.onFileTap != null)
-                  'filePath': FilePathBuilder(onTap: widget.onFileTap),
-                ...markdownBuilders,
+                builders: {
+                  if (widget.onFileTap != null)
+                    'filePath': FilePathBuilder(onTap: widget.onFileTap),
+                  ...markdownBuilders,
+                },
+              ),
+            ),
+            AnimatedBuilder(
+              animation: _cursorController,
+              builder: (context, child) {
+                return Opacity(
+                  opacity: _cursorController.value,
+                  child: const Text(
+                    '\u258D',
+                    style: TextStyle(fontSize: 16, height: 1),
+                  ),
+                );
               },
             ),
-          ),
-          AnimatedBuilder(
-            animation: _cursorController,
-            builder: (context, child) {
-              return Opacity(
-                opacity: _cursorController.value,
-                child: const Text(
-                  '\u258D',
-                  style: TextStyle(fontSize: 16, height: 1),
-                ),
-              );
-            },
-          ),
+          ],
         ],
       ),
     );
